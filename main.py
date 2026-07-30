@@ -66,10 +66,18 @@ LOOKBACK_HOURS = 24
 GEMINI_MODEL = "gemini-flash-latest"
 MAX_ARTICLES_TO_MODEL = 60  # プロンプトに含める記事数の上限（トークン節約のため）
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-EMAIL_USER = os.environ.get("EMAIL_USER")
-EMAIL_PASS = os.environ.get("EMAIL_PASS")
-TO_EMAIL = os.environ.get("TO_EMAIL")
+def _clean_env(value: Optional[str]) -> Optional[str]:
+    """GitHub Secrets登録時にコピペで紛れ込みやすい、ノーブレークスペース(\xa0)や
+    改行・前後の空白などを除去する。"""
+    if value is None:
+        return None
+    return re.sub(r"\s+", "", value)
+
+
+GEMINI_API_KEY = _clean_env(os.environ.get("GEMINI_API_KEY"))
+EMAIL_USER = _clean_env(os.environ.get("EMAIL_USER"))
+EMAIL_PASS = _clean_env(os.environ.get("EMAIL_PASS"))
+TO_EMAIL = _clean_env(os.environ.get("TO_EMAIL"))
 
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
