@@ -63,7 +63,7 @@ RSS_FEEDS = [
 ]
 
 LOOKBACK_HOURS = 24
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-flash-latest"
 MAX_ARTICLES_TO_MODEL = 60  # プロンプトに含める記事数の上限（トークン節約のため）
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
