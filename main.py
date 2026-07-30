@@ -24,6 +24,7 @@ import os
 import re
 import smtplib
 import sys
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
@@ -67,11 +68,14 @@ GEMINI_MODEL = "gemini-flash-latest"
 MAX_ARTICLES_TO_MODEL = 60  # プロンプトに含める記事数の上限（トークン節約のため）
 
 def _clean_env(value: Optional[str]) -> Optional[str]:
-    """GitHub Secrets登録時にコピペで紛れ込みやすい、ノーブレークスペース(\xa0)や
-    改行・前後の空白などを除去する。"""
+    """GitHub Secrets登録時に紛れ込みやすい問題を補正する。
+    - IMEが全角モードのまま入力された「＠」「．」などの全角文字を半角に変換(NFKC正規化)
+    - ノーブレークスペース(\xa0)・改行・前後の空白などを除去
+    """
     if value is None:
         return None
-    return re.sub(r"\s+", "", value)
+    normalized = unicodedata.normalize("NFKC", value)
+    return re.sub(r"\s+", "", normalized)
 
 
 GEMINI_API_KEY = _clean_env(os.environ.get("GEMINI_API_KEY"))
