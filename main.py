@@ -12,7 +12,7 @@ GitHub Actions から毎朝6:00 (JST) に自動実行されることを想定し
     GEMINI_API_KEY  : Gemini APIキー
     EMAIL_USER      : 送信元Gmailアドレス
     EMAIL_PASS      : Gmailのアプリパスワード
-    TO_EMAIL        : 送信先メールアドレス
+    TO_EMAIL        : 送信先メールアドレス（複数宛先は半角カンマ区切りで指定可能。例: a@x.com,b@y.com）
 """
 
 from __future__ import annotations
@@ -323,17 +323,27 @@ def build_email_html(summaries: list[SummarizedArticle], jst_date: str) -> str:
 """
 
 
+def parse_recipients(value: Optional[str]) -> list[str]:
+    """TO_EMAILを複数宛先対応でパースする。
+    区切り文字として半角カンマ・全角読点(、)・セミコロン・改行を許容する。
+    例: "a@example.com,b@example.com" や "a@example.com、b@example.com" など。
+    """
+    if not value:
+        return []
+    parts = re.split(r"[,、;\n]+", value)
+    return [p.strip() for p in parts if p.strip()]
+
+
 def _diagnose_address(label: str, value: Optional[str]) -> None:
     """メールアドレスの値そのものはログに出さず、疑わしい特徴だけを診断ログに出す。
-    公開リポジトリのActionsログにメールアドレス本体が出ないようにするため。"""
+    公開リポジトリのActionsログにメールアドレス本体が出ないようにするため。
+    1件の宛先アドレスを想定した診断（複数宛先の場合は1件ずつ呼び出すこと）。"""
     if value is None:
         logger.info("%s diagnostic: 値が設定されていません (None)", label)
         return
     flags = []
     if "=" in value:
         flags.append("'='を含む(Secret入力時に変数名ごと貼り付けた可能性)")
-    if "," in value:
-        flags.append("','を含む")
     if "<" in value or ">" in value:
         flags.append("山括弧<>を含む")
     if '"' in value or "'" in value:
@@ -355,19 +365,25 @@ def send_email(html_body: str, subject: str) -> None:
     if not (EMAIL_USER and EMAIL_PASS and TO_EMAIL):
         raise RuntimeError("EMAIL_USER / EMAIL_PASS / TO_EMAIL が設定されていません。")
 
+    recipients = parse_recipients(TO_EMAIL)
+    if not recipients:
+        raise RuntimeError("TO_EMAIL から有効な宛先を1件も取り出せませんでした。")
+
     _diagnose_address("EMAIL_USER", EMAIL_USER)
-    _diagnose_address("TO_EMAIL", TO_EMAIL)
+    logger.info("宛先件数: %d件", len(recipients))
+    for i, addr in enumerate(recipients, start=1):
+        _diagnose_address(f"TO_EMAIL[{i}]", addr)
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = formataddr(("Cycling News Digest", EMAIL_USER))
-    msg["To"] = TO_EMAIL
+    msg["To"] = ", ".join(recipients)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.starttls()
         server.login(EMAIL_USER, EMAIL_PASS)
-        server.sendmail(EMAIL_USER, [TO_EMAIL], msg.as_string())
+        server.sendmail(EMAIL_USER, recipients, msg.as_string())
 
     logger.info("メール送信完了")
 
