@@ -70,7 +70,7 @@ MAX_ARTICLES_TO_MODEL = 60  # プロンプトに含める記事数の上限（�
 def _clean_env(value: Optional[str]) -> Optional[str]:
     """GitHub Secrets登録時に紛れ込みやすい問題を補正する。
     - IMEが全角モードのまま入力された「＠」「．」などの全角文字を半角に変換(NFKC正規化)
-    - ノーブレークスペース(\xa0)・改行・前後の空白などを除去
+    - ノーブレークスペース(\\xa0)・改行・前後の空白などを除去
     """
     if value is None:
         return None
@@ -323,9 +323,40 @@ def build_email_html(summaries: list[SummarizedArticle], jst_date: str) -> str:
 """
 
 
+def _diagnose_address(label: str, value: Optional[str]) -> None:
+    """メールアドレスの値そのものはログに出さず、疑わしい特徴だけを診断ログに出す。
+    公開リポジトリのActionsログにメールアドレス本体が出ないようにするため。"""
+    if value is None:
+        logger.info("%s diagnostic: 値が設定されていません (None)", label)
+        return
+    flags = []
+    if "=" in value:
+        flags.append("'='を含む(Secret入力時に変数名ごと貼り付けた可能性)")
+    if "," in value:
+        flags.append("','を含む")
+    if "<" in value or ">" in value:
+        flags.append("山括弧<>を含む")
+    if '"' in value or "'" in value:
+        flags.append("クォートを含む")
+    if value.count("@") != 1:
+        flags.append(f"'@'の数が{value.count('@')}個")
+    non_ascii = [f"U+{ord(c):04X}" for c in value if ord(c) > 127]
+    if non_ascii:
+        flags.append(f"非ASCII文字あり: {non_ascii}")
+    logger.info(
+        "%s diagnostic: 文字数=%d 疑わしい点=%s",
+        label,
+        len(value),
+        flags if flags else "なし",
+    )
+
+
 def send_email(html_body: str, subject: str) -> None:
     if not (EMAIL_USER and EMAIL_PASS and TO_EMAIL):
         raise RuntimeError("EMAIL_USER / EMAIL_PASS / TO_EMAIL が設定されていません。")
+
+    _diagnose_address("EMAIL_USER", EMAIL_USER)
+    _diagnose_address("TO_EMAIL", TO_EMAIL)
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -338,7 +369,7 @@ def send_email(html_body: str, subject: str) -> None:
         server.login(EMAIL_USER, EMAIL_PASS)
         server.sendmail(EMAIL_USER, [TO_EMAIL], msg.as_string())
 
-    logger.info("メール送信完了: %s -> %s", EMAIL_USER, TO_EMAIL)
+    logger.info("メール送信完了")
 
 
 # ---------------------------------------------------------------------------
